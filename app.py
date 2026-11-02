@@ -1,17 +1,55 @@
+import html
 import random
 import pandas as pd
 import streamlit as st
 from transformers import pipeline
 
-st.set_page_config(page_title="BERT vs GPT-2", page_icon="🤖", layout="centered")
+st.set_page_config(page_title="BERT vs GPT-2", page_icon="🤖", layout="wide")
 
-# Models are downloaded from the Hugging Face Hub
+# ---------------------------------------------------------------- styling
+st.markdown("""
+<style>
+.block-container {padding-top: 1.5rem; max-width: 1100px;}
+.hero {
+    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #db2777 100%);
+    padding: 2.2rem 2rem; border-radius: 20px; color: #ffffff; margin-bottom: 1.2rem;
+    box-shadow: 0 10px 30px rgba(79,70,229,0.35);
+}
+.hero h1 {margin: 0; font-size: 2.4rem; color: #ffffff;}
+.hero p {margin: 0.4rem 0 0 0; font-size: 1.05rem; opacity: 0.92; color: #ffffff;}
+.pill {
+    display: inline-block; padding: 0.25rem 0.8rem; margin: 0.8rem 0.4rem 0 0;
+    border-radius: 999px; background: rgba(255,255,255,0.2); font-size: 0.85rem; color: #ffffff;
+}
+.card {
+    border: 1px solid rgba(128,128,128,0.25); border-radius: 16px;
+    padding: 1.2rem 1.3rem; background: rgba(128,128,128,0.06); height: 100%;
+}
+.card h3 {margin-top: 0;}
+.result {
+    border-radius: 16px; padding: 1.4rem; text-align: center; color: #ffffff;
+    font-size: 1.8rem; font-weight: 700; margin-bottom: 0.8rem;
+}
+.pos {background: linear-gradient(135deg, #059669, #10b981);}
+.neg {background: linear-gradient(135deg, #dc2626, #f43f5e);}
+.gen {
+    border-left: 5px solid #7c3aed; border-radius: 12px; padding: 1rem 1.2rem;
+    background: rgba(124,58,237,0.08); line-height: 1.6; margin-bottom: 0.7rem;
+}
+.gen .prompt {background: rgba(124,58,237,0.25); padding: 0 4px; border-radius: 4px; font-weight: 600;}
+.small {font-size: 0.85rem; opacity: 0.75;}
+</style>
+""", unsafe_allow_html=True)
+
+# ---------------------------------------------------------------- models
+BERT_ID = "textattack/bert-base-uncased-SST-2"
+GPT_ID = "gpt2"
+
 @st.cache_resource(max_entries=1)
 def load_model(name):
     if name == "BERT":
-        return pipeline("sentiment-analysis",
-                        model="textattack/bert-base-uncased-SST-2")
-    return pipeline("text-generation", model="gpt2")
+        return pipeline("sentiment-analysis", model=BERT_ID)
+    return pipeline("text-generation", model=GPT_ID)
 
 @st.cache_data
 def load_samples():
@@ -21,74 +59,175 @@ def load_samples():
         return []
 
 samples = load_samples()
+LABELS = {"LABEL_0": "NEGATIVE", "LABEL_1": "POSITIVE"}
 
-st.title("BERT vs GPT-2")
-st.caption("Encoder-only vs decoder-only Transformers, loaded from Hugging Face")
+st.session_state.setdefault("bert_text", "The movie was excellent.")
+st.session_state.setdefault("gpt_prompt", "Artificial intelligence will")
+st.session_state.setdefault("bert_history", [])
+st.session_state.setdefault("gpt_history", [])
 
-page = st.sidebar.radio(
-    "Choose a model",
-    ["BERT (encoder-only)", "GPT-2 (decoder-only)", "Comparison"],
-)
+# ---------------------------------------------------------------- sidebar
+with st.sidebar:
+    st.header("About")
+    st.write("Compare an **encoder-only** model (BERT) with a **decoder-only** model (GPT-2).")
+    st.markdown(f"- [BERT on Hugging Face](https://huggingface.co/{BERT_ID})")
+    st.markdown(f"- [GPT-2 on Hugging Face](https://huggingface.co/{GPT_ID})")
+    st.divider()
+    st.caption("Dataset: IMDB movie reviews")
+    st.caption("Models run on CPU, so the first request can take a while.")
+    if st.button("Clear history"):
+        st.session_state["bert_history"] = []
+        st.session_state["gpt_history"] = []
+        st.rerun()
 
-# ---------------- BERT ----------------
-if page == "BERT (encoder-only)":
-    st.header("BERT: sentiment classification")
-    st.write("BERT reads the whole text and predicts a label.")
+# ---------------------------------------------------------------- hero
+st.markdown("""
+<div class="hero">
+  <h1>🤖 BERT vs GPT-2</h1>
+  <p>Understanding vs generating: two Transformer architectures, side by side.</p>
+  <span class="pill">Encoder-only: BERT</span>
+  <span class="pill">Decoder-only: GPT-2</span>
+  <span class="pill">Hugging Face</span>
+  <span class="pill">Streamlit</span>
+</div>
+""", unsafe_allow_html=True)
 
-    st.session_state.setdefault("bert_text", "The movie was excellent.")
+tab_bert, tab_gpt, tab_cmp = st.tabs(["🔍 BERT: Understand", "✍️ GPT-2: Generate", "⚖️ Comparison"])
 
-    if samples and st.button("Load a random IMDB review"):
+# ================================================================ BERT
+with tab_bert:
+    st.subheader("Sentiment classification with BERT")
+    st.caption("BERT reads the whole text (left and right context) and predicts a label.")
+
+    st.write("**Try an example:**")
+    ex = st.columns(4)
+    examples = [
+        "The movie was excellent.",
+        "The plot was boring and the acting was terrible.",
+        "I loved every minute of it.",
+        "What a waste of time and money.",
+    ]
+    for col, e in zip(ex, examples):
+        if col.button(e, key="ex_" + e, use_container_width=True):
+            st.session_state["bert_text"] = e
+    if samples and st.button("🎲 Load a random IMDB review"):
         st.session_state["bert_text"] = random.choice(samples)
 
-    text = st.text_area("Input text", key="bert_text", height=160)
+    text = st.text_area("Input text", key="bert_text", height=150)
+    st.markdown(f"<span class='small'>{len(text.split())} words</span>", unsafe_allow_html=True)
 
-    if st.button("Classify", type="primary"):
+    if st.button("Classify", type="primary", key="classify"):
         if not text.strip():
             st.warning("Please enter some text.")
         else:
             with st.spinner("Loading BERT and classifying..."):
                 clf = load_model("BERT")
-                r = clf(text, truncation=True, max_length=512)[0]
-            label = {"LABEL_0": "NEGATIVE", "LABEL_1": "POSITIVE"}.get(r["label"], r["label"])
-            if label == "POSITIVE":
-                st.success(f"Output: {label}")
-            else:
-                st.error(f"Output: {label}")
-            st.metric("Confidence", f"{r['score']:.2%}")
-            st.progress(float(r["score"]))
+                res = clf(text, truncation=True, max_length=512, top_k=None)
+                if res and isinstance(res[0], list):
+                    res = res[0]
+            scores = {LABELS.get(r["label"], r["label"]): r["score"] for r in res}
+            best = max(scores, key=scores.get)
+            css = "pos" if best == "POSITIVE" else "neg"
+            icon = "😊" if best == "POSITIVE" else "😞"
+            st.markdown(f"<div class='result {css}'>{icon} {best}</div>", unsafe_allow_html=True)
 
-# ---------------- GPT-2 ----------------
-elif page == "GPT-2 (decoder-only)":
-    st.header("GPT-2: text generation")
-    st.write("GPT-2 uses the previous tokens to predict the next ones.")
+            c1, c2 = st.columns(2)
+            c1.metric("Confidence", f"{scores[best]:.1%}")
+            c2.metric("Words analysed", min(len(text.split()), 512))
+            for lab in ["POSITIVE", "NEGATIVE"]:
+                if lab in scores:
+                    st.write(f"{lab}: {scores[lab]:.1%}")
+                    st.progress(float(scores[lab]))
+            st.session_state["bert_history"].insert(0, {
+                "Input": text[:80] + ("..." if len(text) > 80 else ""),
+                "Output": best,
+                "Confidence": f"{scores[best]:.1%}",
+            })
 
-    prompt = st.text_input("Start of a sentence", "Artificial intelligence will")
-    c1, c2, c3 = st.columns(3)
+    if st.session_state["bert_history"]:
+        st.markdown("#### History")
+        st.dataframe(pd.DataFrame(st.session_state["bert_history"]), use_container_width=True, hide_index=True)
+
+# ================================================================ GPT-2
+with tab_gpt:
+    st.subheader("Text generation with GPT-2")
+    st.caption("GPT-2 uses the previous tokens to predict the next token, one at a time.")
+
+    st.write("**Try a prompt:**")
+    pr = st.columns(4)
+    prompts = ["Artificial intelligence will", "The future of education is",
+               "Once upon a time", "The best way to learn is"]
+    for col, p in zip(pr, prompts):
+        if col.button(p, key="pr_" + p, use_container_width=True):
+            st.session_state["gpt_prompt"] = p
+
+    prompt = st.text_input("Start of a sentence", key="gpt_prompt")
+
+    c1, c2, c3, c4 = st.columns(4)
     max_new = c1.slider("New tokens", 10, 100, 40)
     temp = c2.slider("Temperature", 0.1, 1.5, 0.8)
     top_k = c3.slider("Top-k", 1, 100, 50)
+    n_out = c4.slider("Variations", 1, 3, 2)
+    st.caption("Higher temperature = more creative. Lower = more predictable.")
 
-    if st.button("Generate", type="primary"):
+    if st.button("Generate", type="primary", key="generate"):
         if not prompt.strip():
             st.warning("Please enter a prompt.")
         else:
             with st.spinner("Loading GPT-2 and generating..."):
                 gen = load_model("GPT2")
-                out = gen(prompt, max_new_tokens=max_new, do_sample=True,
-                          temperature=temp, top_k=top_k, pad_token_id=50256)
-            st.subheader("Generated text")
-            st.write(out[0]["generated_text"])
-            st.info("Click Generate again: the output changes because GPT-2 samples the next token.")
+                outs = gen(prompt, max_new_tokens=max_new, do_sample=True, temperature=temp,
+                           top_k=top_k, num_return_sequences=n_out, pad_token_id=50256)
+            st.markdown("#### Generated text")
+            for i, o in enumerate(outs, 1):
+                full = o["generated_text"]
+                cont = full[len(prompt):] if full.startswith(prompt) else full
+                st.markdown(
+                    f"<div class='gen'><b>Version {i}</b><br>"
+                    f"<span class='prompt'>{html.escape(prompt)}</span>{html.escape(cont)}</div>",
+                    unsafe_allow_html=True,
+                )
+                st.session_state["gpt_history"].insert(0, {"Prompt": prompt, "Generated": full})
+            st.info("Press Generate again: the output changes because GPT-2 samples the next token.")
 
-# ---------------- Comparison ----------------
-else:
-    st.header("Comparison")
-    st.markdown("""
-| | BERT (encoder-only) | GPT-2 (decoder-only) |
-|---|---|---|
-| Input | Full sentence | Beginning of a sentence |
-| Output | Label + confidence | New generated text |
-| Attention | Bidirectional | Causal (left to right) |
-| Pre-training | Masked word prediction | Next-token prediction |
-| Best for | Classification, understanding | Text generation |
-""")
+    if st.session_state["gpt_history"]:
+        st.markdown("#### History")
+        st.dataframe(pd.DataFrame(st.session_state["gpt_history"][:10]), use_container_width=True, hide_index=True)
+
+# ================================================================ Comparison
+with tab_cmp:
+    st.subheader("Encoder-only vs decoder-only")
+    a, b = st.columns(2)
+    with a:
+        st.markdown("""
+<div class="card">
+<h3>🔍 BERT (encoder-only)</h3>
+<b>Goal:</b> understand text<br>
+<b>Input:</b> full sentence<br>
+<b>Output:</b> label + confidence<br>
+<b>Attention:</b> bidirectional<br>
+<b>Pre-training:</b> masked word prediction<br>
+<b>Best for:</b> classification, NER, question answering
+</div>""", unsafe_allow_html=True)
+    with b:
+        st.markdown("""
+<div class="card">
+<h3>✍️ GPT-2 (decoder-only)</h3>
+<b>Goal:</b> generate text<br>
+<b>Input:</b> beginning of a sentence<br>
+<b>Output:</b> new text<br>
+<b>Attention:</b> causal (left to right)<br>
+<b>Pre-training:</b> next-token prediction<br>
+<b>Best for:</b> text generation, completion
+</div>""", unsafe_allow_html=True)
+
+    st.markdown("#### Side-by-side")
+    st.dataframe(pd.DataFrame({
+        "": ["Input", "Output", "Attention", "Pre-training", "Best for"],
+        "BERT (encoder-only)": ["Full sentence", "Label + confidence", "Bidirectional",
+                                "Masked word prediction", "Understanding / classification"],
+        "GPT-2 (decoder-only)": ["Start of a sentence", "New generated text", "Causal (left to right)",
+                                 "Next-token prediction", "Text generation"],
+    }), use_container_width=True, hide_index=True)
+
+    st.success("Encoder = understanding the whole input. Decoder = generating the output step by step.")
