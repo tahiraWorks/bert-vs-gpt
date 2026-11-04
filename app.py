@@ -42,8 +42,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------------- models
-BERT_ID = "textattack/bert-base-uncased-SST-2"
-GPT_ID = "gpt2"
+BERT_ID = "TahiraAbbas/bert-multilingual-imdb-sentiment"
+GPT_ID = "TahiraAbbas/gpt2-wikitext"
 
 @st.cache_resource(max_entries=1)
 def load_model(name):
@@ -85,8 +85,8 @@ st.markdown("""
 <div class="hero">
   <h1>🤖 BERT vs GPT-2</h1>
   <p>Understanding vs generating: two Transformer architectures, side by side.</p>
-  <span class="pill">Encoder-only: BERT</span>
-  <span class="pill">Decoder-only: GPT-2</span>
+  <span class="pill">Multilingual encoder: BERT</span>
+  <span class="pill">Monolingual decoder: GPT-2</span>
   <span class="pill">Hugging Face</span>
   <span class="pill">Streamlit</span>
 </div>
@@ -97,15 +97,15 @@ tab_bert, tab_gpt, tab_cmp = st.tabs(["🔍 BERT: Understand", "✍️ GPT-2: Ge
 # ================================================================ BERT
 with tab_bert:
     st.subheader("Sentiment classification with BERT")
-    st.caption("BERT reads the whole text (left and right context) and predicts a label.")
+    st.caption("Multilingual BERT (mBERT, 104 languages) fine-tuned on English IMDB reviews. Try other languages!")
 
     st.write("**Try an example:**")
     ex = st.columns(4)
     examples = [
         "The movie was excellent.",
-        "The plot was boring and the acting was terrible.",
-        "I loved every minute of it.",
-        "What a waste of time and money.",
+        "La película fue excelente.",
+        "Ce film était terrible.",
+        "یہ فلم بہت اچھی تھی۔",
     ]
     for col, e in zip(ex, examples):
         if col.button(e, key="ex_" + e, use_container_width=True):
@@ -151,12 +151,12 @@ with tab_bert:
 # ================================================================ GPT-2
 with tab_gpt:
     st.subheader("Text generation with GPT-2")
-    st.caption("GPT-2 uses the previous tokens to predict the next token, one at a time.")
+    st.caption("Monolingual GPT-2 (English only) fine-tuned on WikiText. Try an Urdu prompt to see its limit.")
 
     st.write("**Try a prompt:**")
     pr = st.columns(4)
-    prompts = ["Artificial intelligence will", "The future of education is",
-               "Once upon a time", "The best way to learn is"]
+    prompts = ["Artificial intelligence will", "The history of",
+               "Once upon a time", "یہ ایک"]
     for col, p in zip(pr, prompts):
         if col.button(p, key="pr_" + p, use_container_width=True):
             st.session_state["gpt_prompt"] = p
